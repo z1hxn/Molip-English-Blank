@@ -1,0 +1,45 @@
+:root {
+  --bg: #f8f4e9;
+  --ink: #1f2b3f;
+  --muted: #596577;
+  --card: rgba(255, 255, 255, 0.9);
+  --editor: #ffffff;
+  --output: #fffdf8;
+  --line: #d7d5cd;
+  --focus: #2d8e78;
+  --cta-strong: #e06c36;
+  --cta-soft: #f3b34f;
+  --shadow-soft: 0 12px 30px rgba(28, 40, 62, 0.08);
+  --shadow-pop: 0 8px 18px rgba(28, 40, 62, 0.18);
+
+  --sans:
+    'Avenir Next', 'Nunito Sans', 'Pretendard', 'Noto Sans KR', 'Segoe UI',
+    sans-serif;
+  --mono:
+    'JetBrains Mono', 'SFMono-Regular', 'Consolas', 'D2Coding', 'Courier New',
+    monospace;
+
+  color: var(--ink);
+  font-family: var(--sans);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 12% 10%, rgba(254, 211, 135, 0.35), transparent 26%),
+    radial-gradient(circle at 92% 22%, rgba(111, 188, 174, 0.22), transparent 25%),
+    linear-gradient(180deg, #fffdf6 0%, var(--bg) 62%, #efe5d1 100%);
+}
+
+h1,
+h2 {
+  margin: 0;
+}
