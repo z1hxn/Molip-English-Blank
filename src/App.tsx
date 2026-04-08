@@ -95,11 +95,14 @@ const STOP_WORDS = new Set([
   'day',
 ])
 
-const normalizeCore = (value: string) =>
+const normalizeCoreLower = (value: string) =>
   value
     .toLowerCase()
     .replace(/^[^a-z0-9']+|[^a-z0-9']+$/g, '')
     .trim()
+
+const normalizeCoreCaseSensitive = (value: string) =>
+  value.replace(/^[^A-Za-z0-9']+|[^A-Za-z0-9']+$/g, '').trim()
 
 const parseTokenParts = (token: string) => {
   const match = token.match(/^([^A-Za-z0-9']*)([A-Za-z0-9']+)([^A-Za-z0-9']*)$/)
@@ -155,12 +158,12 @@ const pickRandomIndices = (pool: number[], count: number) => {
 const makeQuestion = (item: QuizItem): QuizQuestion => {
   const tokens = item.english.split(/\s+/).filter(Boolean)
   const candidates = tokens
-    .map((token, index) => ({ index, core: normalizeCore(token) }))
+    .map((token, index) => ({ index, core: normalizeCoreLower(token) }))
     .filter(({ core }) => core.length > 2 && !STOP_WORDS.has(core))
     .map(({ index }) => index)
 
   const fallback = tokens
-    .map((token, index) => ({ index, core: normalizeCore(token) }))
+    .map((token, index) => ({ index, core: normalizeCoreLower(token) }))
     .filter(({ core }) => core.length > 0)
     .map(({ index }) => index)
 
@@ -225,8 +228,8 @@ const gradeQuestion = (question: QuizQuestion, answersById: Record<string, strin
   const checkedById: Record<string, boolean> = {}
 
   blanks.forEach((blank) => {
-    const user = normalizeCore(answersById[blank.blankId] ?? '')
-    const expected = normalizeCore(blank.answer)
+    const user = normalizeCoreCaseSensitive(answersById[blank.blankId] ?? '')
+    const expected = normalizeCoreCaseSensitive(blank.answer)
     const isCorrect = user !== '' && user === expected
     total += 1
     if (isCorrect) correct += 1
@@ -253,7 +256,7 @@ function App() {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [gradesByIndex, setGradesByIndex] = useState<Record<number, QuestionGrade>>({})
   const [focusSignal, setFocusSignal] = useState(0)
-  const firstBlankRef = useRef<HTMLInputElement | null>(null)
+  const blankInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
   const totalBlanks = collectBlankUnits(questions).length
   const isFinished = mode === 'exam' && currentIndex >= questions.length
@@ -266,12 +269,13 @@ function App() {
     if (mode !== 'exam' || isFinished) return
 
     const rafId = window.requestAnimationFrame(() => {
-      firstBlankRef.current?.focus()
-      firstBlankRef.current?.select()
+      const firstInput = blankInputRefs.current[firstBlankId]
+      firstInput?.focus()
+      firstInput?.select()
     })
 
     return () => window.cancelAnimationFrame(rafId)
-  }, [focusSignal, mode, isFinished])
+  }, [firstBlankId, focusSignal, mode, isFinished])
 
   const makeExamFromInput = () => {
     const parsed = parseItems(input)
@@ -336,6 +340,26 @@ function App() {
     setCurrentIndex((prev) => prev - 1)
   }
 
+  const handleBlankEnter = (blankId: string) => {
+    const blankIndex = currentBlanks.findIndex((blank) => blank.blankId === blankId)
+    if (blankIndex < 0) return
+
+    const nextBlank = currentBlanks[blankIndex + 1]
+    if (nextBlank) {
+      const nextInput = blankInputRefs.current[nextBlank.blankId]
+      nextInput?.focus()
+      nextInput?.select()
+      return
+    }
+
+    if (currentGrade) {
+      goNextQuestion()
+      return
+    }
+
+    gradeCurrentQuestion()
+  }
+
   const returnToBuilder = () => {
     setMode('builder')
     setCurrentIndex(0)
@@ -387,6 +411,8 @@ function App() {
             onChange={(event) => setInput(event.target.value)}
             className="builder-input"
             spellCheck={false}
+            autoCapitalize="none"
+            autoCorrect="off"
           />
 
           <div className="builder-controls">
@@ -524,7 +550,9 @@ function App() {
                       className={`blank-input ${statusClass}`}
                       style={{ width: `${unit.width}px` }}
                       value={answersById[unit.blankId] ?? ''}
-                      ref={unit.blankId === firstBlankId ? firstBlankRef : null}
+                      ref={(node) => {
+                        blankInputRefs.current[unit.blankId] = node
+                      }}
                       onChange={(event) => {
                         const nextValue = event.target.value
                         setAnswersById((prev) => ({ ...prev, [unit.blankId]: nextValue }))
@@ -536,6 +564,13 @@ function App() {
                           })
                         }
                       }}
+                      onKeyDown={(event) => {
+                        if (event.key !== 'Enter') return
+                        event.preventDefault()
+                        handleBlankEnter(unit.blankId)
+                      }}
+                      autoCapitalize="none"
+                      autoCorrect="off"
                       aria-label={`${currentQuestion.number}번 빈칸`}
                     />
                     {unit.suffix}
