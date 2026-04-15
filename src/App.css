@@ -303,8 +303,19 @@
 }
 
 .study-progress {
-  margin: 0 0 12px;
+  margin: 0 0 4px;
   color: var(--muted);
+}
+
+.study-meta {
+  margin: 0 0 12px;
+  color: #506281;
+  font-size: 13px;
+}
+
+.study-status {
+  margin: 0 0 12px;
+  color: #2a3f63;
 }
 
 .study-card {
@@ -363,6 +374,15 @@
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.study-actions .warning-btn,
+.study-actions .success-btn {
+  flex: 1 1 0;
+}
+
+.study-done {
+  text-align: center;
 }
 
 .quiz-header {
@@ -698,6 +718,32 @@ button:disabled {
   border-color: #e7c2c2;
   color: #b84343;
   background: #fff8f8;
+}
+
+.success-btn {
+  border: none;
+  color: #fff;
+  background: linear-gradient(120deg, #0e9f6e, #2bb673 60%, #55ca88);
+}
+
+.warning-btn {
+  border: none;
+  color: #fff;
+  background: linear-gradient(120deg, #d47a2c, #de8f36 55%, #e8a74b);
+}
+
+.icon-circle-btn {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+}
+
+.icon-circle-btn svg {
+  width: 20px;
+  height: 20px;
 }
 
 @media (max-width: 900px) {

@@ -39,6 +39,16 @@ type QuestionGrade = {
   checkedById: Record<string, boolean>
 }
 
+type StudyAnswerHistory = {
+  queue: number[]
+  unknownQueue: number[]
+  index: number
+  score: number
+  answeredCount: number
+  done: boolean
+  revealed: boolean
+}
+
 type ScriptRecord = {
   id: string
   title: string
@@ -456,6 +466,12 @@ function App() {
 
   const [studyIndex, setStudyIndex] = useState(0)
   const [studyRevealed, setStudyRevealed] = useState(false)
+  const [studyQueue, setStudyQueue] = useState<number[]>([])
+  const [studyUnknownQueue, setStudyUnknownQueue] = useState<number[]>([])
+  const [studyScore, setStudyScore] = useState(0)
+  const [studyAnsweredCount, setStudyAnsweredCount] = useState(0)
+  const [studyDone, setStudyDone] = useState(false)
+  const [studyHistory, setStudyHistory] = useState<StudyAnswerHistory[]>([])
 
   const [quizScriptId, setQuizScriptId] = useState<string | null>(null)
   const [quizItems, setQuizItems] = useState<QuizItem[]>([])
@@ -789,19 +805,27 @@ function App() {
 
   const startStudy = () => {
     if (!selectedScript || !selectedItems.length) return
+    const initialQueue = selectedItems.map((_, index) => index)
     touchScript(selectedScript.id)
+    setStudyQueue(initialQueue)
+    setStudyUnknownQueue([])
     setStudyIndex(0)
+    setStudyScore(0)
+    setStudyAnsweredCount(0)
+    setStudyDone(false)
+    setStudyHistory([])
     setStudyRevealed(false)
     setScreen('study')
   }
 
   const toggleStudyReveal = () => {
     if (!selectedScript) return
-    const item = selectedItems[studyIndex]
+    const sourceIndex = studyQueue[studyIndex]
+    const item = sourceIndex === undefined ? null : selectedItems[sourceIndex]
     if (!item) return
 
     if (!studyRevealed) {
-      upsertSentenceStat(selectedScript.id, item, studyIndex, (stat) => ({
+      upsertSentenceStat(selectedScript.id, item, sourceIndex, (stat) => ({
         ...stat,
         studyRevealCount: stat.studyRevealCount + 1,
         lastStudiedAt: nowIso(),
@@ -810,9 +834,69 @@ function App() {
     setStudyRevealed((prev) => !prev)
   }
 
-  const moveStudy = (step: number) => {
-    if (!selectedItems.length) return
-    setStudyIndex((prev) => clamp(prev + step, 0, selectedItems.length - 1))
+  const markStudyCard = (known: boolean) => {
+    const sourceIndex = studyQueue[studyIndex]
+    const item = sourceIndex === undefined ? null : selectedItems[sourceIndex]
+    if (!item) return
+
+    setStudyHistory((prev) => [
+      ...prev,
+      {
+        queue: [...studyQueue],
+        unknownQueue: [...studyUnknownQueue],
+        index: studyIndex,
+        score: studyScore,
+        answeredCount: studyAnsweredCount,
+        done: studyDone,
+        revealed: studyRevealed,
+      },
+    ])
+
+    const nextUnknownQueue = known
+      ? studyUnknownQueue
+      : studyUnknownQueue.includes(sourceIndex)
+        ? studyUnknownQueue
+        : [...studyUnknownQueue, sourceIndex]
+    const nextAnsweredCount = studyAnsweredCount + 1
+    const nextScore = known ? studyScore + 1 : studyScore
+
+    setStudyUnknownQueue(nextUnknownQueue)
+    setStudyAnsweredCount(nextAnsweredCount)
+    setStudyScore(nextScore)
+
+    if (studyIndex < studyQueue.length - 1) {
+      setStudyIndex((prev) => prev + 1)
+      setStudyRevealed(false)
+      return
+    }
+
+    setStudyDone(true)
+    setStudyRevealed(false)
+  }
+
+  const undoStudyMark = () => {
+    const last = studyHistory[studyHistory.length - 1]
+    if (!last) return
+
+    setStudyHistory((prev) => prev.slice(0, -1))
+    setStudyQueue(last.queue)
+    setStudyUnknownQueue(last.unknownQueue)
+    setStudyIndex(last.index)
+    setStudyScore(last.score)
+    setStudyAnsweredCount(last.answeredCount)
+    setStudyDone(last.done)
+    setStudyRevealed(last.revealed)
+  }
+
+  const retryStudyUnknownOnly = () => {
+    if (!studyUnknownQueue.length) return
+    setStudyQueue(studyUnknownQueue)
+    setStudyUnknownQueue([])
+    setStudyIndex(0)
+    setStudyScore(0)
+    setStudyAnsweredCount(0)
+    setStudyDone(false)
+    setStudyHistory([])
     setStudyRevealed(false)
   }
 
@@ -1372,8 +1456,65 @@ function App() {
   }
 
   if (screen === 'study' && selectedScript) {
-    const item = selectedItems[studyIndex]
-    if (!item) {
+    if (studyDone) {
+      const wrongSet = new Set(studyUnknownQueue)
+      const wrongItems = studyQueue
+        .filter((sourceIndex) => wrongSet.has(sourceIndex))
+        .map((sourceIndex) => selectedItems[sourceIndex])
+        .filter((entry): entry is QuizItem => Boolean(entry))
+
+      return (
+        <div className="app-shell">
+          <main className="page study-page">
+            <section className="panel study-panel study-done">
+              <div className="panel-top">
+                <h2>카드 학습 완료</h2>
+                <button onClick={() => setScreen('script')}>스크립트로</button>
+              </div>
+              <p className="study-status">
+                총 {studyQueue.length}장 중 {studyScore}장 아는 카드 · {studyUnknownQueue.length}장 모르는
+                카드
+              </p>
+
+              {studyUnknownQueue.length > 0 ? (
+                <section className="wrong-review">
+                  <p className="wrong-title">모르는 카드 {studyUnknownQueue.length}개</p>
+                  <div className="wrong-list">
+                    {wrongItems.map((wrongItem, index) => (
+                      <article
+                        key={`${wrongItem.number}-${index}-${wrongItem.english}`}
+                        className="wrong-item"
+                      >
+                        <p className="wrong-head">
+                          {wrongItem.number}. {wrongItem.meaning}
+                        </p>
+                        <p className="wrong-answer">{wrongItem.english}</p>
+                      </article>
+                    ))}
+                  </div>
+                  <button className="primary-btn wrong-only-btn" onClick={retryStudyUnknownOnly}>
+                    모르는 카드만 다시
+                  </button>
+                </section>
+              ) : (
+                <p className="all-correct">모든 카드를 아는 카드로 분류했습니다.</p>
+              )}
+
+              <div className="study-actions">
+                <button className="primary-btn" onClick={startStudy}>
+                  처음부터 다시
+                </button>
+                <button onClick={() => setScreen('script')}>스크립트 허브로</button>
+              </div>
+            </section>
+          </main>
+        </div>
+      )
+    }
+
+    const sourceIndex = studyQueue[studyIndex]
+    const item = sourceIndex === undefined ? null : selectedItems[sourceIndex]
+    if (!item || !studyQueue.length) {
       return (
         <div className="app-shell">
           <main className="page">
@@ -1395,8 +1536,19 @@ function App() {
               <button onClick={() => setScreen('script')}>스크립트로</button>
             </div>
             <p className="study-progress">
-              {studyIndex + 1} / {selectedItems.length}
+              {studyIndex + 1} / {studyQueue.length}
             </p>
+            <p className="study-meta">
+              아는 카드 {studyScore}장 · 모르는 카드 {studyUnknownQueue.length}장
+            </p>
+            <div className="progress-track">
+              <div
+                className="progress-fill"
+                style={{
+                  width: `${Math.round((studyAnsweredCount / Math.max(1, studyQueue.length)) * 100)}%`,
+                }}
+              />
+            </div>
 
             <button className={`study-card ${studyRevealed ? 'revealed' : ''}`} onClick={toggleStudyReveal}>
               <p className="study-number">{item.number}번</p>
@@ -1406,14 +1558,29 @@ function App() {
             </button>
 
             <div className="study-actions">
-              <button onClick={() => moveStudy(-1)} disabled={studyIndex === 0}>
-                이전 카드
+              <button className="warning-btn" onClick={() => markStudyCard(false)}>
+                몰라요
               </button>
-              <button className="primary-btn" onClick={toggleStudyReveal}>
-                {studyRevealed ? '가리기' : '정답 보기'}
+              <button
+                className="icon-circle-btn"
+                onClick={undoStudyMark}
+                disabled={!studyHistory.length}
+                aria-label="이전 카드로 되돌리기"
+                title="이전 카드로 되돌리기"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    d="M9 7H5v4M5 11a7 7 0 1 0 2.1-5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </button>
-              <button onClick={() => moveStudy(1)} disabled={studyIndex === selectedItems.length - 1}>
-                다음 카드
+              <button className="success-btn" onClick={() => markStudyCard(true)}>
+                아는거
               </button>
             </div>
           </section>
